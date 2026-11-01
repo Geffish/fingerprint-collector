@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Collect system and network fingerprints, scan the local network and inventory attached devices." />
+    <meta name="theme-color" content="#0f766e" />
+    <link rel="icon" type="image/png" href="./icon-192.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>Fingerprint Collector</title>
+  </head>
+  <body>
+    <header class="app-header">
+      <img src="./icon-192.png" alt="" class="logo" width="40" height="40" />
+      <div>
+        <h1>Network Fingerprint Collector</h1>
+        <p class="subtitle" id="mode-label"></p>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" id="tab-device" aria-controls="panel-device" aria-selected="true">This device</button>
+      <button role="tab" id="tab-network" aria-controls="panel-network" aria-selected="false">Network</button>
+      <button role="tab" id="tab-attached" aria-controls="panel-attached" aria-selected="false">Attached<span class="wide"> devices</span></button>
+      <button role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false">Reports</button>
+    </nav>
+
+    <main>
+      <!-- This device -->
+      <section id="panel-device" role="tabpanel" aria-labelledby="tab-device" class="panel">
+        <section class="card">
+          <div class="card-head">
+            <h2>Current fingerprint</h2>
+            <button id="collect-btn" class="primary" type="button">Collect Fingerprint</button>
+          </div>
+          <dl id="result" class="result">
+            <p class="empty">Click “Collect Fingerprint” to gather details about this device.</p>
+          </dl>
+          <div id="extras-wrap" hidden>
+            <h3>Browser details</h3>
+            <dl id="extras" class="result"></dl>
+          </div>
+        </section>
+
+        <section class="card" id="interfaces-card" hidden>
+          <div class="card-head">
+            <h2>Network interfaces</h2>
+            <button id="interfaces-btn" type="button">Refresh</button>
+          </div>
+          <div id="interfaces" class="grid-cards"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>Fingerprint history <span id="history-count" class="count"></span></h2>
+            <div class="actions">
+              <button id="export-btn" type="button">Export CSV</button>
+              <button id="clear-btn" type="button" class="danger">Clear</button>
+            </div>
+          </div>
+          <p class="hint" id="csv-path"></p>
+          <div class="table-wrap">
+            <table class="stack">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Computer name</th>
+                  <th>OS</th>
+                  <th>Architecture</th>
+                  <th>Processor</th>
+                  <th>IP address</th>
+                  <th>MAC address</th>
+                </tr>
+              </thead>
+              <tbody id="history"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- Network -->
+      <section id="panel-network" role="tabpanel" aria-labelledby="tab-network" class="panel" hidden>
+        <section class="card">
+          <div class="card-head">
+            <h2>Scan the local network</h2>
+            <div class="actions">
+              <button id="scan-btn" class="primary" type="button">Scan network</button>
+              <button id="cancel-scan-btn" type="button" hidden>Cancel</button>
+            </div>
+          </div>
+          <div id="native-only-network" class="notice" hidden></div>
+          <div id="scan-setup">
+            <fieldset class="ranges">
+              <legend>Networks to scan</legend>
+              <div id="range-list"></div>
+              <label class="custom-range">
+                <span>Other ranges (optional)</span>
+                <input id="custom-range" type="text" inputmode="text" autocomplete="off" spellcheck="false"
+                  placeholder="e.g. 192.168.1.0/24, 10.0.0.1-50" />
+              </label>
+            </fieldset>
+            <p class="hint">Only scan networks you own or have permission to scan. Up to 4,096 addresses per scan.</p>
+          </div>
+          <div id="scan-progress" class="progress-wrap" hidden>
+            <div class="progress-label"><span id="scan-phase"></span><span id="scan-count"></span></div>
+            <div class="progress"><div id="scan-bar"></div></div>
+          </div>
+        </section>
+
+        <section class="card" id="scan-results" hidden>
+          <div class="card-head">
+            <h2>Devices found <span id="scan-total" class="count"></span></h2>
+            <div class="actions">
+              <button id="scan-csv-btn" type="button">Export CSV</button>
+              <button id="scan-json-btn" type="button">Export JSON</button>
+            </div>
+          </div>
+          <p class="hint" id="scan-meta"></p>
+          <div id="scan-notes"></div>
+          <div id="type-chips" class="chips"></div>
+          <input id="scan-filter" class="filter" type="search" placeholder="Filter by name, IP, vendor, type…" aria-label="Filter devices" />
+          <div id="host-list" class="host-list"></div>
+        </section>
+      </section>
+
+      <!-- Attached -->
+      <section id="panel-attached" role="tabpanel" aria-labelledby="tab-attached" class="panel" hidden>
+        <section class="card">
+          <div class="card-head">
+            <h2>Attached devices</h2>
+            <div class="actions">
+              <button id="attached-btn" class="primary" type="button">Refresh</button>
+              <button id="attached-csv-btn" type="button" disabled>Export CSV</button>
+            </div>
+          </div>
+          <div id="native-only-attached" class="notice" hidden></div>
+          <p class="hint" id="attached-meta">USB devices, drives, printers, monitors and other peripherals connected to this computer.</p>
+          <div id="attached-summary" class="summary"></div>
+          <div id="attached-notes"></div>
+        </section>
+        <div id="attached-sections"></div>
+      </section>
+
+      <!-- Reports -->
+      <section id="panel-report" role="tabpanel" aria-labelledby="tab-report" class="panel" hidden>
+        <section class="card">
+          <div class="card-head">
+            <h2>Full report</h2>
+            <button id="build-report-btn" class="primary" type="button">Build full report</button>
+          </div>
+          <p class="hint">
+            A full report brings together this device, its network interfaces, every device found on the network and
+            everything attached to this computer. Missing parts are collected when you build it.
+          </p>
+          <ul id="report-checklist" class="checklist"></ul>
+          <div id="report-progress" class="progress-wrap" hidden>
+            <div class="progress-label"><span id="report-phase"></span><span id="report-count"></span></div>
+            <div class="progress"><div id="report-bar"></div></div>
+          </div>
+          <div class="export-grid">
+            <button id="report-html-btn" type="button" disabled>
+              <b>HTML report</b><span>Printable, opens in any browser. Print it to PDF.</span>
+            </button>
+            <button id="report-json-btn" type="button" disabled>
+              <b>JSON data</b><span>Everything collected, for other tools.</span>
+            </button>
+            <button id="report-net-csv-btn" type="button" disabled>
+              <b>Network devices CSV</b><span>One row per device, for Excel.</span>
+            </button>
+            <button id="report-att-csv-btn" type="button" disabled>
+              <b>Attached devices CSV</b><span>USB, drives, printers and peripherals.</span>
+            </button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer>
+      <div id="status" class="status" role="status">Ready.</div>
+      <div class="copyright" id="copyright"></div>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

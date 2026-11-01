@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#1e3a8a"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="220" fill="url(#bg)"/>
+  <g fill="none" stroke="#e0f2fe" stroke-width="44" stroke-linecap="round">
+    <path d="M300 420 A230 230 0 0 1 724 420"/>
+    <path d="M258 560 A260 260 0 0 1 512 292 A260 260 0 0 1 770 560"/>
+    <path d="M372 760 C352 700 344 640 344 580 A168 168 0 0 1 680 580 C680 640 672 700 650 750"/>
+    <path d="M440 800 C426 740 420 670 420 590 A92 92 0 0 1 604 590 C604 660 596 720 584 780"/>
+    <path d="M512 590 C512 680 506 760 494 830"/>
+  </g>
+  <g fill="#5eead4">
+    <circle cx="512" cy="200" r="34"/>
+    <circle cx="300" cy="250" r="26"/>
+    <circle cx="724" cy="250" r="26"/>
+  </g>
+  <g stroke="#5eead4" stroke-width="14" stroke-linecap="round">
+    <line x1="512" y1="200" x2="300" y2="250"/>
+    <line x1="512" y1="200" x2="724" y2="250"/>
+  </g>
+</svg>

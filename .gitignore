@@ -1,0 +1,23 @@
+node_modules/
+dist/
+dist-web/
+release/
+src-tauri/target/
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/build/
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/local.properties
+src-tauri/gen/android/keystore.properties
+*.jks
+*.keystore
+*.secrets
+
+# Collected fingerprint data (contains real host names, IPs and MAC addresses)
+*.csv
+
+# FrontPage metadata
+_vti_cnf/
+_vti_pvt/
+
+# Editor settings
+.vscode/
