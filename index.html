@@ -17,12 +17,18 @@
         <p class="subtitle" id="mode-label"></p>
       </div>
     </header>
+    <div id="update-banner" class="banner" role="status" hidden>
+      <span id="update-text"></span>
+      <button id="update-install-btn" type="button" class="primary">Install and restart</button>
+      <button id="update-dismiss-btn" type="button">Later</button>
+    </div>
 
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button role="tab" id="tab-device" aria-controls="panel-device" aria-selected="true">This device</button>
       <button role="tab" id="tab-network" aria-controls="panel-network" aria-selected="false">Network</button>
       <button role="tab" id="tab-attached" aria-controls="panel-attached" aria-selected="false">Attached<span class="wide"> devices</span></button>
       <button role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false">Reports</button>
+      <button role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false">Settings</button>
     </nav>
 
     <main>
@@ -40,6 +46,14 @@
             <h3>Browser details</h3>
             <dl id="extras" class="result"></dl>
           </div>
+        </section>
+
+        <section class="card" id="wifi-card" hidden>
+          <div class="card-head">
+            <h2>Wi-Fi connection</h2>
+            <button id="wifi-btn" type="button">Refresh</button>
+          </div>
+          <dl id="wifi" class="result"></dl>
         </section>
 
         <section class="card" id="interfaces-card" hidden>
@@ -116,10 +130,46 @@
             </div>
           </div>
           <p class="hint" id="scan-meta"></p>
+          <div id="scan-changes"></div>
           <div id="scan-notes"></div>
           <div id="type-chips" class="chips"></div>
           <input id="scan-filter" class="filter" type="search" placeholder="Filter by name, IP, vendor, type…" aria-label="Filter devices" />
           <div id="host-list" class="host-list"></div>
+        </section>
+
+        <section class="card" id="security-card" hidden>
+          <div class="card-head">
+            <h2>Security checks <span id="security-total" class="count"></span></h2>
+          </div>
+          <p class="hint">Services on your network that are unencrypted, obsolete or often attacked. Nothing is changed on your devices.</p>
+          <div id="security-summary" class="summary"></div>
+          <div id="security-list" class="finding-list"></div>
+        </section>
+
+        <section class="card" id="devices-card" hidden>
+          <div class="card-head">
+            <h2>Your devices <span id="devices-total" class="count"></span></h2>
+            <div class="actions">
+              <button id="devices-csv-btn" type="button">Export CSV</button>
+            </div>
+          </div>
+          <p class="hint">Every device seen in any scan. Give devices your own names and mark the ones you recognise as known, so new arrivals stand out.</p>
+          <input id="devices-filter" class="filter" type="search" placeholder="Filter your devices…" aria-label="Filter your devices" />
+          <div class="table-wrap">
+            <table class="stack">
+              <thead>
+                <tr><th>Device</th><th>Known</th><th>Last address</th><th>MAC address</th><th>First seen</th><th>Last seen</th><th></th></tr>
+              </thead>
+              <tbody id="devices-list"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card" id="history-card" hidden>
+          <div class="card-head">
+            <h2>Scan history <span id="history-total" class="count"></span></h2>
+          </div>
+          <div id="scan-history" class="history-list"></div>
         </section>
       </section>
 
@@ -161,6 +211,9 @@
             <button id="report-html-btn" type="button" disabled>
               <b>HTML report</b><span>Printable, opens in any browser. Print it to PDF.</span>
             </button>
+            <button id="report-pdf-btn" type="button" disabled>
+              <b>PDF report</b><span id="report-pdf-hint">The HTML report as a PDF, ready to email or print.</span>
+            </button>
             <button id="report-json-btn" type="button" disabled>
               <b>JSON data</b><span>Everything collected, for other tools.</span>
             </button>
@@ -171,6 +224,74 @@
               <b>Attached devices CSV</b><span>USB, drives, printers and peripherals.</span>
             </button>
           </div>
+        </section>
+      </section>
+
+      <!-- Settings -->
+      <section id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" class="panel" hidden>
+        <section class="card" id="schedule-card">
+          <h2>Automatic scans</h2>
+          <div class="settings">
+            <label class="setting">
+              <span><b>Scan the network</b><small>Uses the networks ticked on the Network tab.</small></span>
+              <select id="set-interval">
+                <option value="0">Never</option>
+                <option value="15">Every 15 minutes</option>
+                <option value="30">Every 30 minutes</option>
+                <option value="60">Every hour</option>
+                <option value="180">Every 3 hours</option>
+                <option value="360">Every 6 hours</option>
+                <option value="720">Every 12 hours</option>
+                <option value="1440">Every day</option>
+              </select>
+            </label>
+            <label class="setting">
+              <span><b>Tell me about new devices</b><small>Shows a notification when a device that hasn’t been seen before joins the network.</small></span>
+              <input id="set-notify-new" type="checkbox" />
+            </label>
+            <label class="setting">
+              <span><b>Tell me when known devices go missing</b><small>For devices you’ve marked as known.</small></span>
+              <input id="set-notify-missing" type="checkbox" />
+            </label>
+            <label class="setting desktop-only">
+              <span><b>Keep running in the system tray</b><small>Closing the window hides it so scheduled scans keep running. Quit from the tray icon.</small></span>
+              <input id="set-tray" type="checkbox" />
+            </label>
+            <label class="setting desktop-only">
+              <span><b>Start when I sign in to Windows</b><small>Starts quietly in the system tray.</small></span>
+              <input id="set-autostart" type="checkbox" />
+            </label>
+          </div>
+          <p class="hint" id="schedule-status"></p>
+          <p class="hint mobile-only" hidden>On Android, automatic scans only run while the app is open.</p>
+        </section>
+
+        <section class="card desktop-only" id="updates-card">
+          <div class="card-head">
+            <h2>Updates</h2>
+            <button id="update-check-btn" type="button">Check for updates</button>
+          </div>
+          <div class="settings">
+            <label class="setting">
+              <span><b>Check for updates at start-up</b><small>Updates are downloaded from GitHub and verified before installing.</small></span>
+              <input id="set-auto-update" type="checkbox" />
+            </label>
+          </div>
+          <p class="hint" id="update-status"></p>
+        </section>
+
+        <section class="card">
+          <h2>Saved data</h2>
+          <p class="hint" id="data-location"></p>
+          <div class="actions">
+            <button id="clear-scan-history-btn" type="button" class="danger">Clear scan history</button>
+            <button id="forget-devices-btn" type="button" class="danger">Forget all devices</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>About</h2>
+          <p id="about-text"></p>
         </section>
       </section>
     </main>

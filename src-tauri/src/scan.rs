@@ -45,6 +45,8 @@ pub struct Host {
     pub is_gateway: bool,
     pub is_self: bool,
     pub interface: Option<String>,
+    /// The file server still accepts the obsolete SMBv1 protocol.
+    pub smb1: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -468,12 +470,14 @@ pub fn run(emit: &(dyn Fn(&str, usize, usize, usize) + Sync), ranges: Vec<String
                 });
                 let rdns = probe::reverse_dns(ip, Duration::from_secs(2));
                 let nb = probe::netbios(ip, Duration::from_millis(800));
+                let smb1 = open.iter().any(|p| p.port == 445).then(|| probe::smb1(ip, Duration::from_millis(1500))).flatten();
 
                 {
                     let mut map = hosts.lock().unwrap();
                     if let Some(h) = map.get_mut(&ip) {
                         h.open_ports = open;
                         h.hostname = rdns;
+                        h.smb1 = smb1;
                         if let Some(nb) = nb {
                             h.netbios_name = nb.name;
                             h.workgroup = nb.group;
@@ -545,12 +549,20 @@ pub async fn scan_network(app: AppHandle, ranges: Vec<String>) -> Result<ScanRes
         return Err("A scan is already running.".into());
     }
     CANCEL.store(false, Ordering::SeqCst);
-    tauri::async_runtime::spawn_blocking(move || {
+    // Android drops multicast packets (mDNS, SSDP) unless an app holds a multicast lock.
+    #[cfg(target_os = "android")]
+    crate::mobile::call(&app, "acquireMulticast", serde_json::json!({}));
+    let app2 = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let _guard = RunGuard;
-        run(&|p: &str, d, t, f| emit_event(&app, p, d, t, f), ranges)
+        run(&|p: &str, d, t, f| emit_event(&app2, p, d, t, f), ranges)
     })
     .await
-    .map_err(|e| format!("The scan stopped unexpectedly: {e}"))?
+    .map_err(|e| format!("The scan stopped unexpectedly: {e}"));
+    #[cfg(target_os = "android")]
+    crate::mobile::call(&app, "releaseMulticast", serde_json::json!({}));
+    let _ = &app;
+    result?
 }
 
 #[tauri::command]

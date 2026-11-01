@@ -41,6 +41,19 @@ export function fileStamp() {
 
 const MIME = { csv: 'text/csv', html: 'text/html', json: 'application/json' };
 
+/** Print an HTML document with the browser's print dialog (offers Save as PDF). */
+function printHtml(html) {
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  frame.srcdoc = html;
+  frame.onload = () => {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+    setTimeout(() => frame.remove(), 60_000);
+  };
+  document.body.appendChild(frame);
+}
+
 // ---------------------------------------------------------------- Tauri ---
 
 async function tauriBackend() {
@@ -48,6 +61,14 @@ async function tauriBackend() {
   const { listen } = await import('@tauri-apps/api/event');
   const { save, ask } = await import('@tauri-apps/plugin-dialog');
   const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+  const notification = await import('@tauri-apps/plugin-notification');
+  const { openUrl } = await import('@tauri-apps/plugin-opener');
+  const info = await invoke('app_info');
+  const desktop = info.desktop;
+  const windows = info.os === 'windows';
+  const android = info.os === 'android';
+
+  let pendingUpdate = null;
 
   async function saveFile(defaultName, text, ext) {
     const path = await save({
@@ -62,6 +83,18 @@ async function tauriBackend() {
   return {
     native: true,
     label: 'Native app — full system, network and device details',
+    info,
+    features: {
+      wake: true,
+      share: windows,
+      rdp: windows,
+      pdf: windows || android,
+      wifi: windows || android,
+      tray: desktop,
+      autostart: desktop,
+      updater: desktop,
+      schedule: true,
+    },
     collect: () => invoke('collect_fingerprint'),
     extras: () => null,
     save: (fingerprint) => invoke('save_fingerprint', { fingerprint }),
@@ -77,6 +110,50 @@ async function tauriBackend() {
     onScanProgress: (cb) => listen('scan-progress', (e) => cb(e.payload)),
     attached: () => invoke('get_attached_devices'),
     saveFile,
+    loadStore: (name) => invoke('store_load', { name }),
+    saveStore: (name, value) => invoke('store_save', { name, value }),
+    wake: (mac) => invoke('wake_on_lan', { mac }),
+    openShare: (ip) => invoke('open_share', { ip }),
+    openRemoteDesktop: (ip) => invoke('open_remote_desktop', { ip }),
+    openUrl: (url) => openUrl(url),
+    wifi: () => invoke('get_wifi_info'),
+    async exportPdf(name, html) {
+      if (android) return invoke('export_pdf', { html, name, path: null });
+      const path = await save({ defaultPath: name, filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+      if (!path) return null;
+      return invoke('export_pdf', { html, name, path });
+    },
+    async notify(title, body) {
+      let ok = await notification.isPermissionGranted();
+      if (!ok) ok = (await notification.requestPermission()) === 'granted';
+      if (ok) notification.sendNotification({ title, body });
+      return ok;
+    },
+    setBackground: (enabled) => invoke('set_background_mode', { enabled }),
+    onTrayScan: (cb) => listen('tray-scan', () => cb()),
+    async autostart(enable) {
+      const a = await import('@tauri-apps/plugin-autostart');
+      if (enable === undefined) return a.isEnabled();
+      await (enable ? a.enable() : a.disable());
+      return a.isEnabled();
+    },
+    async checkUpdate() {
+      const { check } = await import('@tauri-apps/plugin-updater');
+      pendingUpdate = await check();
+      return pendingUpdate ? { version: pendingUpdate.version, notes: pendingUpdate.body || '' } : null;
+    },
+    async installUpdate(onProgress) {
+      if (!pendingUpdate) return;
+      let total = 0;
+      let got = 0;
+      await pendingUpdate.downloadAndInstall((e) => {
+        if (e.event === 'Started') total = e.data.contentLength || 0;
+        if (e.event === 'Progress') got += e.data.chunkLength;
+        onProgress?.(total ? Math.round((got / total) * 100) : null);
+      });
+      const { relaunch } = await import('@tauri-apps/plugin-process');
+      await relaunch();
+    },
   };
 }
 
@@ -238,6 +315,30 @@ function webBackend() {
       throw new Error(NATIVE_ONLY);
     },
     saveFile: async (name, text, ext) => download(name, text, ext),
+    info: { os: 'web', version: null, desktop: false },
+    features: { pdf: true },
+    loadStore: async (name) => {
+      try {
+        return JSON.parse(localStorage.getItem('fingerprint-collector.' + name) || 'null');
+      } catch {
+        return null;
+      }
+    },
+    saveStore: async (name, value) => {
+      try {
+        localStorage.setItem('fingerprint-collector.' + name, JSON.stringify(value));
+      } catch {
+        /* storage unavailable */
+      }
+    },
+    openUrl: async (url) => window.open(url, '_blank', 'noopener'),
+    exportPdf: async (_name, html) => {
+      printHtml(html);
+      return 'the print dialog';
+    },
+    notify: async () => false,
+    setBackground: async () => {},
+    onTrayScan: async () => () => {},
     nativeOnlyMessage: NATIVE_ONLY,
   };
 }

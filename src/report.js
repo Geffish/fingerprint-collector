@@ -1,6 +1,10 @@
 // Full report: a self-contained, printable HTML document plus CSV / JSON exports.
 
 import { toCsv } from './backend.js';
+import { deviceKey, deviceList, displayName } from './inventory.js';
+
+const labelOf = (inv, h) => inv?.devices[deviceKey(h)]?.label || '';
+const knownOf = (inv, h) => !!inv?.devices[deviceKey(h)]?.trusted;
 
 export const esc = (v) =>
   String(v ?? '')
@@ -45,12 +49,14 @@ export function hostModel(h) {
 
 // ------------------------------------------------------------------ CSV ---
 
-export function networkCsv(scan) {
+export function networkCsv(scan, inv = null) {
   return toCsv(
     scan.hosts,
     [
       'ip',
+      (h) => labelOf(inv, h) || h.display_name,
       'display_name',
+      (h) => (knownOf(inv, h) ? 'Yes' : 'No'),
       'device_type',
       'mac_address',
       'vendor',
@@ -66,10 +72,13 @@ export function networkCsv(scan) {
       (h) => (h.latency_ms != null ? h.latency_ms.toFixed(1) : ''),
       (h) => [...(h.found_by || [])],
       'interface',
+      (h) => (h.smb1 == null ? '' : h.smb1 ? 'Yes' : 'No'),
     ],
     [
       'IP address',
       'Name',
+      'Detected name',
+      'Known',
       'Device type',
       'MAC address',
       'Vendor',
@@ -85,6 +94,7 @@ export function networkCsv(scan) {
       'Latency (ms)',
       'Found by',
       'Interface',
+      'SMBv1 enabled',
     ],
   );
 }
@@ -184,6 +194,15 @@ dt{color:var(--muted)}dd{margin:0}
 .tag{display:inline-block;padding:1px 6px;border-radius:4px;background:#ccfbf1;color:#134e4a;font-size:11px;margin:1px 2px 1px 0}
 .device{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:8px 0;break-inside:avoid}
 .device h3{margin:0 0 6px}
+.tag.new{background:#fef3c7;color:#92400e}
+.sev{display:inline-block;min-width:58px;text-align:center;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;margin-right:6px}
+.sev-high .sev{background:#fee2e2;color:#b91c1c}.stat.sev-high b{color:#b91c1c}
+.sev-medium .sev{background:#fef3c7;color:#b45309}.stat.sev-medium b{color:#b45309}
+.sev-low .sev{background:#e0f2fe;color:#075985}.stat.sev-low b{color:#075985}
+.sev-info .sev{background:#f1f5f9;color:#475569}
+.finding{border:1px solid var(--border);border-left-width:4px;border-radius:6px;padding:8px 12px;margin:8px 0;break-inside:avoid}
+.finding.sev-high{border-left-color:#dc2626}.finding.sev-medium{border-left-color:#d97706}.finding.sev-low{border-left-color:#0284c7}.finding.sev-info{border-left-color:#94a3b8}
+.finding p{margin:4px 0}
 footer{margin-top:32px;padding-top:10px;border-top:1px solid var(--border);color:var(--muted);font-size:12px}
 @media print{body{padding:0;font-size:11px}h2{break-after:avoid}.device{break-inside:avoid}}
 `;
@@ -203,7 +222,10 @@ const table = (headers, rows) =>
 
 const tags = (list) => (list || []).map((t) => `<span class="tag">${esc(t)}</span>`).join('');
 
-export function buildHtmlReport({ fingerprint, extras, interfaces, scan, attached, appVersion }) {
+const SEVS = ['High', 'Medium', 'Low', 'Info'];
+const sevClass = (s) => 'sev-' + s.toLowerCase();
+
+export function buildHtmlReport({ fingerprint, extras, interfaces, wifi, scan, attached, inventory, history, entry, findings, appVersion }) {
   const now = new Date();
   const generated = now.toLocaleString('en-AU', { dateStyle: 'full', timeStyle: 'medium' });
   const title = `Network and device report — ${fingerprint?.computer_name || 'this device'}`;
@@ -213,13 +235,16 @@ export function buildHtmlReport({ fingerprint, extras, interfaces, scan, attache
   const stats = [];
   if (scan) stats.push([scan.hosts.length, 'Network devices']);
   if (scan) stats.push([new Set(scan.hosts.map((h) => h.device_type)).size, 'Device types']);
+  if (entry && !entry.baseline) stats.push([entry.added.length, 'New since last scan']);
+  if (findings) stats.push([findings.filter((f) => f.severity === 'High').length, 'High-risk issues', 'sev-high']);
+  if (findings) stats.push([findings.filter((f) => f.severity === 'Medium').length, 'Medium-risk issues', 'sev-medium']);
   if (attached) stats.push([(attached.usb_devices || []).length, 'USB devices']);
   if (attached) stats.push([(attached.devices || []).filter((d) => d.is_peripheral).length, 'Peripherals']);
   if (attached) stats.push([(attached.volumes || []).length, 'Drives and volumes']);
   if (attached) stats.push([(attached.printers || []).length, 'Printers']);
   if (interfaces) stats.push([interfaces.filter((i) => i.is_up && i.ipv4.length).length, 'Active interfaces']);
   if (stats.length)
-    parts.push(`<div class="summary">${stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${esc(l)}</span></div>`).join('')}</div>`);
+    parts.push(`<div class="summary">${stats.map(([n, l, c]) => `<div class="stat ${c || ''}"><b>${n}</b><span>${esc(l)}</span></div>`).join('')}</div>`);
 
   // This device.
   if (fingerprint) {
@@ -239,6 +264,11 @@ export function buildHtmlReport({ fingerprint, extras, interfaces, scan, attache
       parts.push('<h3>Browser details</h3>');
       parts.push(dl(Object.entries(extras).map(([k, v]) => [k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()), v])));
     }
+  }
+
+  if (wifi) {
+    parts.push('<h3>Wi-Fi connection</h3>');
+    parts.push(dl(Object.entries(wifi)));
   }
 
   // Interfaces.
@@ -275,7 +305,7 @@ export function buildHtmlReport({ fingerprint, extras, interfaces, scan, attache
         ['IP address', 'Name', 'Type', 'Vendor', 'MAC address', 'Open ports'],
         scan.hosts.map((h) => [
           `<span class="mono">${esc(h.ip)}</span>`,
-          esc(h.display_name),
+          `${esc(labelOf(inventory, h) || h.display_name)}${entry?.added?.includes(deviceKey(h)) ? ' <span class="tag new">New</span>' : ''}${knownOf(inventory, h) ? ' <span class="tag">Known</span>' : ''}`,
           esc(h.device_type),
           esc(h.vendor || ''),
           `<span class="mono">${esc(h.mac_address || '')}</span>`,
@@ -286,8 +316,10 @@ export function buildHtmlReport({ fingerprint, extras, interfaces, scan, attache
     parts.push('<h3>Device details</h3>');
     for (const h of scan.hosts) {
       parts.push(
-        `<div class="device"><h3>${esc(h.display_name)} <span class="note">— ${esc(h.ip)}</span></h3>${dl([
+        `<div class="device"><h3>${esc(labelOf(inventory, h) || h.display_name)} <span class="note">— ${esc(h.ip)}</span></h3>${dl([
           ['Device type', h.device_type],
+          ['Detected name', labelOf(inventory, h) ? h.display_name : ''],
+          ['Known device', inventory ? (knownOf(inventory, h) ? 'Yes' : 'No') : ''],
           ['IP address', h.ip],
           ['MAC address', h.mac_address ? `${h.mac_address}${h.private_mac ? ' (private / randomised)' : ''}` : ''],
           ['Vendor', h.vendor],
@@ -304,12 +336,65 @@ export function buildHtmlReport({ fingerprint, extras, interfaces, scan, attache
           ['Service names', [...(h.mdns?.instance_names || [])]],
           ['Other details', [...(h.mdns?.details || [])]],
           ['Open ports', portList(h)],
+          ['SMBv1', h.smb1 == null ? '' : h.smb1 ? 'Enabled (obsolete)' : 'Off'],
           ['Response time', h.latency_ms != null ? `${h.latency_ms.toFixed(1)} ms` : ''],
           ['Found by', [...(h.found_by || [])].join(', ')],
           ['Interface', h.interface],
         ])}</div>`,
       );
     }
+  }
+
+  // Security.
+  if (findings) {
+    parts.push('<h2>Security checks</h2>');
+    parts.push('<p class="meta">Services on the network that are unencrypted, obsolete or often attacked. Found by looking at open ports and announcements only; nothing was changed on any device.</p>');
+    const c = Object.fromEntries(SEVS.map((s) => [s, findings.filter((f) => f.severity === s).length]));
+    parts.push('<div class="summary">' + SEVS.map((s) => '<div class="stat ' + sevClass(s) + '"><b>' + c[s] + '</b><span>' + s + '</span></div>').join('') + '</div>');
+    if (!findings.length) parts.push('<p>No risky services were found on the scanned devices.</p>');
+    for (const f of findings)
+      parts.push(
+        '<div class="finding ' + sevClass(f.severity) + '"><div><span class="sev">' + esc(f.severity) + '</span><b>' + esc(f.title) + '</b> <span class="note">— ' +
+          esc(f.device) + ' (' + esc(f.ip) + ')</span></div><p>' + esc(f.detail) + '</p><p><b>What to do:</b> ' + esc(f.advice) + '</p></div>',
+      );
+  }
+
+  // Inventory and history.
+  if (inventory && Object.keys(inventory.devices).length) {
+    const online = new Set(entry?.keys || []);
+    const all = deviceList(inventory);
+    parts.push('<h2>Your devices (' + all.length + ')</h2>');
+    parts.push('<p class="meta">Every device seen in any scan, with the names you gave them.</p>');
+    parts.push(
+      table(
+        ['Name', 'Known', 'Type', 'Last IP address', 'MAC address', 'First seen', 'Last seen'],
+        all.map((d) => [
+          '<b>' + esc(displayName(d)) + '</b>' + (d.label && d.name ? '<br><span class="note">' + esc(d.name) + '</span>' : ''),
+          d.trusted ? 'Yes' : 'No',
+          esc(d.device_type || ''),
+          '<span class="mono">' + esc(d.ip || '') + '</span>',
+          '<span class="mono">' + esc(d.mac || '') + '</span>',
+          esc(formatDateTime(d.first_seen)),
+          online.has(d.key) ? '<span class="tag">Online now</span>' : esc(formatDateTime(d.last_seen)),
+        ]),
+      ),
+    );
+  }
+  if (history?.length) {
+    const name = (k) => esc(displayName(inventory?.devices[k] || { key: k }));
+    parts.push('<h2>Scan history</h2>');
+    parts.push(
+      table(
+        ['Scanned', 'Networks', 'Devices', 'New', 'Not found'],
+        history.slice(0, 25).map((e) => [
+          esc(formatDateTime(e.started)) + (e.auto ? ' <span class="tag">Automatic</span>' : '') + (e.baseline ? ' <span class="tag">First scan</span>' : ''),
+          esc(e.ranges.join(', ')),
+          e.total,
+          e.added.map(name).join(', '),
+          e.missing.map(name).join(', '),
+        ]),
+      ),
+    );
   }
 
   // Attached.

@@ -772,3 +772,264 @@ input:focus-visible {
     display: none;
   }
 }
+
+/* ---------- 1.1: alerts, devices, security, settings ---------- */
+:root {
+  --warn-bg: #fef3c7;
+  --warn-text: #92400e;
+  --high: #b91c1c;
+  --high-bg: #fee2e2;
+  --medium: #b45309;
+  --medium-bg: #fef3c7;
+  --low: #075985;
+  --low-bg: #e0f2fe;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --warn-bg: #422006;
+    --warn-text: #fcd34d;
+    --high: #f87171;
+    --high-bg: #450a0a;
+    --medium: #fbbf24;
+    --medium-bg: #422006;
+    --low: #7dd3fc;
+    --low-bg: #0c2a3d;
+  }
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 20px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border-bottom: 1px solid var(--border);
+}
+
+.banner[hidden] {
+  display: none;
+}
+
+.banner span {
+  flex: 1 1 200px;
+  font-weight: 600;
+}
+
+.tag.new {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.tag.sev-high {
+  background: var(--high-bg);
+  color: var(--high);
+}
+
+.tag.sev-medium {
+  background: var(--medium-bg);
+  color: var(--medium);
+}
+
+.notice.changes p {
+  margin: 2px 0;
+}
+
+.host-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 0;
+  min-width: 0;
+}
+
+.host-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px 54px;
+}
+
+.host-body > dl {
+  margin: 0;
+}
+
+.host-manage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px 16px;
+}
+
+.host-manage label:first-child {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 220px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.host-actions,
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.host-actions button,
+.row-actions button {
+  padding: 5px 10px;
+  font-size: 0.85rem;
+}
+
+.inline-input {
+  width: 100%;
+  min-width: 140px;
+}
+
+.finding-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.finding {
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.finding p {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+}
+
+.finding .advice {
+  color: var(--muted);
+}
+
+.finding-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.sev {
+  display: inline-block;
+  min-width: 60px;
+  text-align: center;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: var(--row-alt);
+  color: var(--muted);
+}
+
+.finding.sev-high { border-left-color: var(--high); }
+.finding.sev-medium { border-left-color: var(--medium); }
+.finding.sev-low { border-left-color: var(--low); }
+.sev.sev-high { background: var(--high-bg); color: var(--high); }
+.sev.sev-medium { background: var(--medium-bg); color: var(--medium); }
+.sev.sev-low { background: var(--low-bg); color: var(--low); }
+.stat.sev-high b { color: var(--high); }
+.stat.sev-medium b { color: var(--medium); }
+.stat.sev-low b { color: var(--low); }
+
+.history-list .group summary {
+  font-weight: 500;
+}
+
+.history-body {
+  padding: 4px 0 0 18px;
+  font-size: 0.9rem;
+}
+
+.history-body p {
+  margin: 2px 0;
+}
+
+.settings {
+  display: grid;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.setting {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.setting[hidden] {
+  display: none;
+}
+
+.setting > span {
+  display: grid;
+  gap: 2px;
+}
+
+.setting small {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.setting input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  flex-shrink: 0;
+}
+
+.card[hidden] {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .host-body {
+    padding-left: 12px;
+  }
+
+  .setting {
+    align-items: flex-start;
+  }
+
+  .setting:has(select) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.settings + p.hint,
+.settings + .hint {
+  margin-top: 10px;
+}

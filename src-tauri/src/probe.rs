@@ -246,6 +246,60 @@ pub const PORTS: &[(u16, &str)] = &[
     (62078, "Apple device sync"),
 ];
 
+// ---------------------------------------------------------------- SMBv1 ---
+
+/// Does the file server on port 445 still accept the obsolete SMBv1 protocol?
+/// Sends an SMB1 Negotiate offering only "NT LM 0.12". A server with SMBv1
+/// turned off drops the connection or refuses the dialect.
+/// `None` means the question couldn't be asked (no connection).
+pub fn smb1(ip: Ipv4Addr, timeout: Duration) -> Option<bool> {
+    use std::io::Write;
+    let mut stream = TcpStream::connect_timeout(&SocketAddr::new(IpAddr::V4(ip), 445), timeout).ok()?;
+    stream.set_read_timeout(Some(timeout)).ok()?;
+    stream.set_write_timeout(Some(timeout)).ok()?;
+
+    let dialects = b"\x02NT LM 0.12\x00";
+    let mut smb: Vec<u8> = vec![
+        0xFF, b'S', b'M', b'B', // protocol
+        0x72, // SMB_COM_NEGOTIATE
+        0, 0, 0, 0, // status
+        0x18, // flags: case-insensitive, canonical paths
+        0x01, 0xC8, // flags2: long names, NT status, Unicode (no extended security)
+        0, 0, // PID high
+        0, 0, 0, 0, 0, 0, 0, 0, // signature
+        0, 0, // reserved
+        0, 0, // TID
+        0xFF, 0xFE, // PID
+        0, 0, // UID
+        0, 0, // MID
+        0, // word count
+    ];
+    smb.extend_from_slice(&(dialects.len() as u16).to_le_bytes());
+    smb.extend_from_slice(dialects);
+    let len = smb.len() as u32;
+    let mut packet = vec![0u8, (len >> 16) as u8, (len >> 8) as u8, len as u8];
+    packet.extend_from_slice(&smb);
+    if stream.write_all(&packet).is_err() {
+        return Some(false);
+    }
+
+    let mut buf = [0u8; 128];
+    let mut got = 0;
+    let deadline = Instant::now() + timeout;
+    while got < 39 && Instant::now() < deadline {
+        match stream.read(&mut buf[got..]) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => got += n,
+        }
+    }
+    if got < 39 || &buf[4..8] != b"\xFFSMB" || buf[8] != 0x72 {
+        return Some(false); // closed, SMB2 only, or not SMB at all
+    }
+    let status = u32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
+    let dialect = u16::from_le_bytes([buf[37], buf[38]]);
+    Some(status == 0 && buf[36] >= 1 && dialect != 0xFFFF)
+}
+
 /// Quick liveness ports for networks where ARP is unavailable (Android).
 pub const LIVENESS_PORTS: &[u16] = &[80, 443, 445, 22, 62078, 8080, 139, 554, 9100, 7000];
 

@@ -117,6 +117,7 @@ pub fn usb_names(vid: &str, pid: &str) -> (Option<String>, Option<String>) {
 }
 
 /// Generic names Windows gives to sub-functions of a device.
+#[cfg_attr(not(windows), allow(dead_code))]
 fn is_generic_function(name: &str) -> bool {
     let n = name.to_ascii_lowercase();
     [
@@ -573,10 +574,114 @@ pub fn collect() -> AttachedReport {
     report
 }
 
+/// Android: USB OTG devices and storage volumes from the Kotlin helper.
+#[cfg(target_os = "android")]
+fn android_extras(app: &tauri::AppHandle, report: &mut AttachedReport) {
+    #[derive(serde::Deserialize, Default)]
+    #[serde(default)]
+    struct AUsb {
+        name: Option<String>,
+        manufacturer: Option<String>,
+        product: Option<String>,
+        vendor_id: u32,
+        product_id: u32,
+        serial: Option<String>,
+        device_class: Option<String>,
+        interfaces: Vec<String>,
+    }
+    #[derive(serde::Deserialize, Default)]
+    #[serde(default)]
+    struct AVol {
+        description: String,
+        path: Option<String>,
+        removable: bool,
+        primary: bool,
+        emulated: bool,
+        state: Option<String>,
+        uuid: Option<String>,
+        total_bytes: Option<u64>,
+        free_bytes: Option<u64>,
+    }
+    #[derive(serde::Deserialize, Default)]
+    #[serde(default)]
+    struct Resp {
+        usb: Vec<AUsb>,
+        volumes: Vec<AVol>,
+    }
+    let resp = match crate::mobile::call_as::<Resp>(app, "attachedDevices", serde_json::json!({})) {
+        Ok(r) => r,
+        Err(e) => {
+            report.notes.push(format!("Could not read Android device details: {e}"));
+            return;
+        }
+    };
+    report.notes.retain(|n| !n.contains("does not let apps list USB"));
+    report.notes.push("Android lists USB devices plugged in through a USB OTG adapter or hub. Built-in hardware is not shown to apps.".into());
+    for u in resp.usb {
+        let vid = format!("{:04X}", u.vendor_id);
+        let pid = format!("{:04X}", u.product_id);
+        let (vname, pname) = usb_names(&vid, &pid);
+        let vendor_name = u.manufacturer.clone().or(vname);
+        let product_name = u.product.clone().or(pname);
+        let name = product_name.clone().or(u.name.clone()).unwrap_or_else(|| format!("USB device {vid}:{pid}"));
+        report.devices.push(Device {
+            name: name.clone(),
+            category: "USB devices".into(),
+            class: u.device_class.clone(),
+            connection: "USB".into(),
+            manufacturer: vendor_name.clone(),
+            status: None,
+            device_id: u.name.clone(),
+            vendor_id: Some(vid.clone()),
+            product_id: Some(pid.clone()),
+            is_peripheral: true,
+        });
+        report.usb_devices.push(UsbDevice {
+            name,
+            vendor_name,
+            product_name,
+            vendor_id: vid,
+            product_id: pid,
+            serial_number: u.serial,
+            functions: u.interfaces,
+            status: None,
+        });
+    }
+    if !resp.volumes.is_empty() {
+        report.volumes = resp
+            .volumes
+            .into_iter()
+            .map(|v| Volume {
+                name: v.description.clone(),
+                mount_point: v.path.clone().unwrap_or_default(),
+                label: v.uuid.clone(),
+                kind: {
+                    let k = if v.primary { "Internal storage" } else if v.removable { "Removable (SD card / USB)" } else if v.emulated { "Emulated" } else { "Storage" };
+                    match v.state.as_deref() {
+                        Some("mounted") | None => k.to_string(),
+                        Some(st) => format!("{k} ({st})"),
+                    }
+                },
+                file_system: None,
+                total_bytes: v.total_bytes,
+                free_bytes: v.free_bytes,
+                removable: v.removable,
+                network_path: None,
+                physical_drive: None,
+            })
+            .collect();
+    }
+}
+
 #[tauri::command]
-pub async fn get_attached_devices() -> Result<AttachedReport, String> {
+pub async fn get_attached_devices(app: tauri::AppHandle) -> Result<AttachedReport, String> {
     // WMI needs its own COM-initialised thread.
-    tauri::async_runtime::spawn_blocking(collect)
+    let mut report = tauri::async_runtime::spawn_blocking(collect)
         .await
-        .map_err(|e| format!("Could not read attached devices: {e}"))
+        .map_err(|e| format!("Could not read attached devices: {e}"))?;
+    #[cfg(target_os = "android")]
+    android_extras(&app, &mut report);
+    let _ = &app;
+    let _ = &mut report;
+    Ok(report)
 }
